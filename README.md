@@ -1,8 +1,8 @@
 # Phase 1: DivPO Training for Diverse Noun Generation
 
-This project implements the first phase of training a language model using Diversity-enhanced Preference Optimization (DivPO). The goal is to fine-tune a causal language model (e.g., Qwen, Phi) to generate diverse, common, single-word English nouns based on a simple prompt, avoiding proper nouns.
+This project implements the first phase of training a language model using **Diverse Preference Optimization (DivPO)**, a method introduced in the paper **"Diverse Preference Optimization"** by Lanchantin et al. ([arXiv:2501.18101](https://arxiv.org/abs/2501.18101)). The goal is to fine-tune a causal language model (e.g., Qwen, Phi) to generate diverse, common, single-word English nouns based on a simple prompt, avoiding proper nouns.
 
-This script focuses specifically on the DivPO training process, where the model learns to prefer diverse and high-quality (common, non-proper noun) generations over less diverse or lower-quality ones.
+
 
 ## Features
 
@@ -77,6 +77,7 @@ Key configuration options are located in the "Configuration" section (Cell [2]) 
     *   Model checkpoints will be saved periodically in subdirectories within the specified `OUTPUT_DIR`.
     *   The final trained model will be saved in `OUTPUT_DIR/final_checkpoint` upon successful completion.
     *   If training fails, an attempt will be made to save the current state to `OUTPUT_DIR/checkpoint_on_error`.
+    *   **Note:** The default `OUTPUT_DIR` (`./divpo_dat_model_phase1/`) and its contents are ignored by git via the `.gitignore` file.
 
 ## Code Structure
 
