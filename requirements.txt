@@ -19,8 +19,6 @@ openai>=1.0 # Explicitly require the newer OpenAI API structure
 tf-keras # For Keras 3 compatibility with transformers
 tensorflow # Base for tf-keras
 
-# Optimization Tool
-ortools
 
 # Jupyter Environment
 notebook
