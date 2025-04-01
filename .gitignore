@@ -1,0 +1,2 @@
+# Ignore all checkpoints, logs, and model outputs from Phase 1 training
+divpo_dat_model_phase1/ 
