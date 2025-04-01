@@ -1,0 +1,28 @@
+# Core ML/Hugging Face
+torch
+torchvision
+torchaudio
+transformers>=4.38.0 # Using a recent version
+datasets
+trl>=0.8.6 # Using a recent version compatible with recent transformers/openai
+accelerate
+sentence-transformers
+sentencepiece
+
+# NLP Tools
+spacy>=3.0 # Ensure a modern version
+nltk
+wordfreq
+
+# Dependencies for Compatibility/Integrations
+openai>=1.0 # Explicitly require the newer OpenAI API structure
+tf-keras # For Keras 3 compatibility with transformers
+tensorflow # Base for tf-keras
+
+# Optimization Tool
+ortools
+
+# Jupyter Environment
+notebook
+ipykernel
+ipywidgets 
