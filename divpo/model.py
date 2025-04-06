@@ -51,14 +51,14 @@ def load_model(model_name: str) -> Tuple[torch.nn.Module, str]:
     """
     # Define model loading arguments - start by loading on CPU
     model_kwargs = {
-        "torch_dtype": torch.float32,  # Use float32 for MPS compatibility
+        "torch_dtype": torch.float32,  # Use float32 for compatibility
         "device_map": "cpu",           # Load onto CPU initially
         "trust_remote_code": True,     # Required for some models
     }
 
     # Check for available compute devices
-    mps_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
     cuda_available = torch.cuda.is_available()
+    mps_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
     model_device = "cpu"  # Default device
 
     # Load the model
@@ -66,8 +66,18 @@ def load_model(model_name: str) -> Tuple[torch.nn.Module, str]:
     model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
     logger.info("Model loaded on CPU.")
 
-    # Move model to MPS if available
-    if mps_available:
+    # Try CUDA first, then MPS, fall back to CPU
+    if cuda_available:
+        logger.info("Attempting to move model to CUDA...")
+        try:
+            model = model.to("cuda")
+            model_device = "cuda"
+            logger.info("Model successfully moved to CUDA.")
+        except Exception as e:
+            logger.error(f"Failed to move model to CUDA: {e}. Will try MPS.", exc_info=True)
+            cuda_available = False
+    
+    if not cuda_available and mps_available:
         logger.info("Attempting to move model to Apple Silicon (MPS) backend...")
         try:
             model = model.to("mps")
@@ -76,10 +86,9 @@ def load_model(model_name: str) -> Tuple[torch.nn.Module, str]:
         except Exception as e:
             logger.error(f"Failed to move model to MPS: {e}. Keeping model on CPU.", exc_info=True)
             mps_available = False
-    elif cuda_available:
-        logger.info("CUDA available, but this setup prioritizes MPS/CPU. Keeping model on CPU.")
-    else:
-        logger.info("MPS not available. Keeping model on CPU.")
+    
+    if not cuda_available and not mps_available:
+        logger.info("No GPU available. Keeping model on CPU.")
 
     logger.info(f"Model final compute device: {model.device}")
-    return model, model_device 
+    return model, model_device

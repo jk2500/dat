@@ -41,9 +41,8 @@ def load_resources():
     logger.info("Loading NLP tools and embedding model...")
     
     try:
-        # Load word lists
+        # Load word lists - using entire English vocabulary instead of common words
         english_vocab = set(w.lower() for w in nltk.corpus.words.words())
-        common_vocab = set(top_n_list('en', 20000))
         
         # Load embedding model
         embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME, device=EMBEDDING_DEVICE)
@@ -51,7 +50,7 @@ def load_resources():
         
         return {
             'english_vocab': english_vocab,
-            'common_vocab': common_vocab,
+            'common_vocab': english_vocab,  # Use entire English vocab for quality check
             'embedding_model': embedding_model
         }
     
