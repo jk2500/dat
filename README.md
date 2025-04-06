@@ -2,7 +2,7 @@
 
 This project implements the first phase of training a language model using **Diverse Preference Optimization (DivPO)**, a method introduced in the paper **"Diverse Preference Optimization"** by Lanchantin et al. ([arXiv:2501.18101](https://arxiv.org/abs/2501.18101)). The goal is to fine-tune a causal language model (e.g., Qwen, Phi) to generate diverse, common, English nouns based on a simple prompt, avoiding proper nouns.
 
-
+**Note:** This project has been refactored. The original monolithic script `Phase_1_DivPO.py` is preserved but no longer the primary implementation. The current implementation uses a modular structure within the `divpo/` directory and is executed via `run_divpo.py`.
 
 ## Features
 
@@ -12,7 +12,7 @@ This project implements the first phase of training a language model using **Div
 *   **Diversity Scoring:** Leverages sentence-transformers to calculate semantic diversity between generated candidates.
 *   **Configurable:** Allows easy configuration of the base model, hyperparameters (K samples, DPO beta, learning rate, etc.), output directories, and embedding models.
 *   **Device Compatibility:** Designed to run on CPU or Apple Silicon (MPS), with checks and logging for device selection. CUDA is possible but not the primary focus of the current setup.
-*   **Automated NLP Data Download:** Includes checks and downloads for necessary NLTK and spaCy resources on the first run.
+*   **Automated NLP Data Download:** Includes checks and downloads for necessary NLTK and spaCy resources on the first run via `divpo/utils.py`.
 
 ## Setup
 
@@ -44,11 +44,11 @@ This project implements the first phase of training a language model using **Div
     *(Ensure `requirements.txt` includes: `torch`, `transformers`, `trl`, `datasets`, `sentence-transformers`, `spacy`, `nltk`, `wordfreq`, `accelerate`, `bitsandbytes` (optional))*
 
 5.  **NLP Data Download:**
-    The script will attempt to download required NLTK data (`words`, `averaged_perceptron_tagger`) and the spaCy model (`en_core_web_sm`) automatically when first run. Ensure you have an internet connection.
+    The script (`run_divpo.py`) will attempt to download required NLTK data (`words`, `averaged_perceptron_tagger`) and the spaCy model (`en_core_web_sm`) automatically when first run. Ensure you have an internet connection.
 
 ## Configuration
 
-Key configuration options are located in the "Configuration" section (Cell [2]) of the `Phase_1_DivPO.py` script:
+Key configuration options are located in the `divpo/config.py` script:
 
 *   `MODEL_NAME`: The Hugging Face model identifier for the base language model (e.g., `"Qwen/Qwen2.5-0.5B-Instruct"`, `"microsoft/phi-3-mini-4k-instruct"`). You can also use a local path.
 *   `OUTPUT_DIR`: Directory to save model checkpoints and the final trained model.
@@ -61,37 +61,51 @@ Key configuration options are located in the "Configuration" section (Cell [2]) 
 *   `MAX_PROMPT_LENGTH`, `MAX_TARGET_LENGTH`: Maximum token lengths for prompts and generated words.
 *   `EMBEDDING_MODEL_NAME`: Sentence Transformer model used for diversity calculation.
 *   `EMBEDDING_DEVICE`: Device used for embedding calculations (`mps` or `cpu`).
+*   `DEFAULT_PROMPT`: The prompt template used for generation.
+*   `BASE_NUM_PROMPTS`: Target number of prompt instances in the training dataset.
 
 ## Usage
 
-1.  **Modify Configuration:** Adjust the parameters in the "Configuration" section of the script as needed.
-2.  **Run the Script:**
-    *   **As a Python script:**
-        ```bash
-        python Phase_1_DivPO.py
-        ```
-    *   **In a Jupyter environment:** Open the `.ipynb` file (if you convert the script) and run the cells sequentially.
+1.  **Modify Configuration:** Adjust the parameters in `divpo/config.py` as needed.
+2.  **Run the Training Script:**
+    ```bash
+    python run_divpo.py
+    ```
 
 3.  **Output:**
     *   Training progress, loss, and metrics will be logged to the console.
     *   Model checkpoints will be saved periodically in subdirectories within the specified `OUTPUT_DIR`.
     *   The final trained model will be saved in `OUTPUT_DIR/final_checkpoint` upon successful completion.
     *   If training fails, an attempt will be made to save the current state to `OUTPUT_DIR/checkpoint_on_error`.
-    *   **Note:** The default `OUTPUT_DIR` (`./divpo_dat_model_phase1/`) and its contents are ignored by git via the `.gitignore` file.
+    *   **Note:** Check `divpo/config.py` and `.gitignore` for the exact `OUTPUT_DIR` location and git tracking status.
 
 ## Code Structure
 
-*   **Imports and Setup:** Loads necessary libraries and performs initial setup (logging, warnings).
-*   **Configuration:** Defines model names, hyperparameters, and paths.
-*   **Helper Functions:** Contains functions for NLP data download, quality scoring (`calculate_quality`), embedding calculation (`get_embeddings`), and diversity scoring (`calculate_pairwise_semantic_diversity`).
-*   **Prepare Dataset:** Creates a simple dataset containing only the prompts.
-*   **Load Tokenizer and Model:** Loads the specified Hugging Face tokenizer and model, handling device placement (CPU/MPS).
-*   **Custom DivPODPOTrainer:** Defines the `DivPODPOTrainer` class, overriding `compute_loss` to implement the DivPO logic (generation, scoring, pairing, loss calculation) and `_prepare_dataset` to handle prompt-only input.
-*   **Custom Data Collator:** Defines `DivPODataCollator` to prepare batches containing only tokenized prompts.
-*   **Training Arguments & Trainer Initialization:** Configures `DPOConfig` and initializes the `DivPODPOTrainer`.
-*   **Train the Model:** Starts the training process using `divpo_trainer.train()`.
-*   **Save Final Model:** Saves the final model, tokenizer, and configuration.
-*   **(Optional) Test Generation:** A commented-out cell provides example code to load the trained model and test its generation capabilities.
+The codebase is organized into the following modules:
+
+*   `divpo/__init__.py`: Package initialization.
+*   `divpo/config.py`: Configuration parameters for training (model names, hyperparameters, paths, prompts).
+*   `divpo/data.py`: Dataset preparation (prompt dataset creation) and data collation.
+*   `divpo/model.py`: Loading and configuration of the language model and tokenizer.
+*   `divpo/trainer.py`: Defines the custom `DivPODPOTrainer` class, overriding methods to implement the DivPO logic (generation, scoring, pairing, loss calculation).
+*   `divpo/training.py`: High-level functions orchestrating the training pipeline (setup, load, train, save).
+*   `divpo/utils.py`: Helper functions for NLP resource setup (NLTK, spaCy downloads), quality scoring (`calculate_quality`), embedding calculation (`get_embeddings`), and diversity scoring (`calculate_pairwise_semantic_diversity`).
+*   `run_divpo.py`: The main script to execute the training process by calling functions from `divpo.training`.
+*   `requirements.txt`: Lists project dependencies.
+*   `Phase_1_DivPO.py`: (Deprecated) Original monolithic implementation script.
+*   `setup_nlp_resources.py`: (Deprecated) Older script for NLP setup, now handled in `divpo/utils.py`.
+*   `test.py`: Script for testing the trained model (may require updates).
+
+## Example Test Results
+
+A sample run comparing the baseline model (`Qwen/Qwen2.5-0.5B-Instruct`) against the model fine-tuned with DivPO yielded the following observations based on 200 generated samples:
+
+*   **Vocabulary Shift & Collapse:** The trained model generated significantly fewer unique words (**9**) compared to the baseline model (**47**). Notably, the outputted words by the trained model ('silence', 'echo', 'peace', 'light', 'ethereal', 'elegance', 'effect', 'eternal', 'love') are **common nouns**, aligning with the project's quality goal, even though the overall variety decreased.
+*   **Semantic Similarity/Diversity:**
+    *   The *minimum* pairwise similarity between generated words increased significantly (0.033 baseline vs 0.139 trained), indicating that the closest pair of words in the trained set were more distinct than the closest pair in the baseline.
+    *   The *average* pairwise similarity saw a slight increase (0.284 baseline vs 0.304 trained).
+    *   The overall semantic diversity score (1 - max pairwise similarity) remained comparable, decreasing only slightly (0.716 baseline vs 0.696 trained).
+*   **Interpretation:** While the training aimed for *diverse common nouns*, these results show a trade-off. The model converged to a much smaller vocabulary of valid common nouns, losing overall quantitative variety compared to the baseline. However, the words within this smaller set maintained a reasonable level of semantic distance from each other (especially avoiding very close pairs), and the overall diversity metric did not collapse. This might suggest a shift in sampling towards a constrained but relatively distinct set of common nouns, though further analysis is needed to determine if this outcome fully aligns with the desired goal of *broad* diversity within the target category.
 
 ## Dependencies
 
