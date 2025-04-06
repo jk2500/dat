@@ -72,4 +72,77 @@ Key configuration options are located in the `divpo/config.py` script:
 
 1.  **Modify Configuration:** Adjust the parameters in `divpo/config.py` as needed.
 2.  **Run the Training Script:**
-    ```
+    ```bash
+    python run_divpo.py
+    ```bash
+3.  **Output:**
+    *   Training progress, loss, and metrics will be logged to the console.
+    *   Model checkpoints will be saved periodically in subdirectories within the specified `OUTPUT_DIR`.
+    *   The final trained model will be saved in `OUTPUT_DIR/final_checkpoint` upon successful completion.
+    *   If training fails, an attempt will be made to save the current state to `OUTPUT_DIR/checkpoint_on_error`.
+    *   **Note:** Check `divpo/config.py` and `.gitignore` for the exact `OUTPUT_DIR` location and git tracking status.
+
+## Code Structure
+
+The codebase is organized into the following modules:
+
+*   `divpo/__init__.py`: Package initialization.
+*   `divpo/config.py`: Configuration parameters for training (model names, hyperparameters, paths, prompts).
+*   `divpo/data.py`: Dataset preparation (prompt dataset creation) and data collation.
+*   `divpo/model.py`: Loading and configuration of the language model and tokenizer.
+*   `divpo/trainer.py`: Defines the custom `DivPODPOTrainer` class, overriding methods to implement the DivPO logic (generation, scoring, pairing, loss calculation).
+*   `divpo/training.py`: High-level functions orchestrating the training pipeline (setup, load, train, save).
+*   `divpo/utils.py`: Helper functions for NLP resource setup (NLTK, spaCy downloads), quality scoring (`calculate_quality`), embedding calculation (`get_embeddings`), and diversity scoring (`calculate_pairwise_semantic_diversity`).
+*   `run_divpo.py`: The main script to execute the training process by calling functions from `divpo.training`.
+*   `requirements.txt`: Lists project dependencies.
+*   `Phase_1_DivPO.py`: (Deprecated) Original monolithic implementation script.
+*   `setup_nlp_resources.py`: (Deprecated) Older script for NLP setup, now handled in `divpo/utils.py`.
+*   `test.py`: Script for testing the trained model (may require updates).
+
+## Example Test Results
+
+A sample run comparing the baseline model (`Qwen/Qwen2.5-0.5B-Instruct`) against the model fine-tuned with DivPO yielded the following observations based on 200 generated samples:
+
+*   **Vocabulary Shift & Collapse:** The trained model generated significantly fewer unique words (**9**) compared to the baseline model (**47**). Notably, the outputted words by the trained model ('silence', 'echo', 'peace', 'light', 'ethereal', 'elegance', 'effect', 'eternal', 'love') are **common nouns**, aligning with the project's quality goal, even though the overall variety decreased.
+*   **Semantic Similarity/Diversity:**
+    *   The *minimum* pairwise similarity between generated words increased significantly (0.033 baseline vs 0.139 trained), indicating that the closest pair of words in the trained set were more distinct than the closest pair in the baseline.
+    *   The *average* pairwise similarity saw a slight increase (0.284 baseline vs 0.304 trained).
+    *   The overall semantic diversity score (1 - max pairwise similarity) remained comparable, decreasing only slightly (0.716 baseline vs 0.696 trained).
+*   **Interpretation:** While the training aimed for *diverse common nouns*, these results show a trade-off. The model converged to a much smaller vocabulary of valid common nouns, losing overall quantitative variety compared to the baseline. However, the words within this smaller set maintained a reasonable level of semantic distance from each other (especially avoiding very close pairs), and the overall diversity metric did not collapse. This might suggest a shift in sampling towards a constrained but relatively distinct set of common nouns, though further analysis is needed to determine if this outcome fully aligns with the desired goal of *broad* diversity within the target category.
+
+## Dependencies
+
+*   `torch`
+*   `transformers`
+*   `trl`
+*   `datasets`
+*   `sentence-transformers`
+*   `spacy` (+ `en_core_web_sm` model)
+*   `nltk` (+ `words`, `averaged_perceptron_tagger` data)
+*   `wordfreq`
+*   `accelerate`
+*   `bitsandbytes` (Optional, for 4-bit quantization if enabled)
+
+## License
+
+MIT License
+
+Copyright (c) 2025 jk2500
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. 
