@@ -1,4 +1,4 @@
-# Phase 1: DivPO Training for Diverse Noun Generation
+# DivPO Training for Diverse Noun Generation
 
 This project implements the first phase of training a language model using **Diverse Preference Optimization (DivPO)**, a method introduced in the paper **"Diverse Preference Optimization"** by Lanchantin et al. ([arXiv:2501.18101](https://arxiv.org/abs/2501.18101)). The goal is to fine-tune a causal language model (e.g., Qwen, Phi) to generate diverse, common, English nouns based on a simple prompt, avoiding proper nouns.
 
