@@ -21,9 +21,9 @@ DPO_BETA = 0.1  # DPO beta parameter (controls how much to trust the reference m
 PER_DEVICE_TRAIN_BATCH_SIZE = 2  # Adjust based on GPU/MPS memory
 GRADIENT_ACCUMULATION_STEPS = 8  # Adjust effective batch size
 LEARNING_RATE = 1e-6             # Tune LR (often lower for fine-tuning)
-NUM_TRAIN_EPOCHS = 20            # Increased from 5 to 20 epochs for longer training
-LOGGING_STEPS = 50               # Log less frequently for long training
-SAVE_STEPS = 500                 # Save checkpoints less frequently
+NUM_TRAIN_EPOCHS = 5            # Increased from 5 to 20 epochs for longer training
+LOGGING_STEPS = 20               # Log less frequently for long training
+SAVE_STEPS = 100                 # Save checkpoints less frequently
 MAX_PROMPT_LENGTH = 64           # Max tokens for the prompt
 MAX_TARGET_LENGTH = 10           # Max *new* tokens for the generated word
 

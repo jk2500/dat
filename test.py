@@ -1,150 +1,212 @@
 from transformers import pipeline, TextGenerationPipeline, AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 import torch
+import torch.nn.functional as F
 import logging
 import os
-import sys # Added for path manipulation if needed, though not strictly required here
+import sys
+from sentence_transformers import SentenceTransformer
+import numpy as np
+from typing import List, Set, Tuple
 
 # --- Basic Logging Setup ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- Constants (copied from Phase_1_DivPO.py) ---
-# You might want to load these from a config file or pass as arguments in a real application
-MAX_TARGET_LENGTH = 10 # Max *new* tokens for the generated word (used in GenerationConfig)
+# --- Constants ---
+MAX_TARGET_LENGTH = 10
+BASE_MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"  # The original, untrained model
+TRAINED_MODEL_PATH = "./divpo_dat_model_phase1/final_checkpoint"
+BASE_PROMPT = "Generate a english single word. Do not use proper nouns like names of people or places. Just generate a single word."
+EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"  # Same as used in training
 
-# --- Main Script ---
-final_checkpoint_dir_to_test = "./divpo_dat_model_phase1/final_checkpoint" # Or path to another checkpoint
+def calculate_semantic_metrics(words: List[str], embedding_model: SentenceTransformer) -> Tuple[float, float]:
+    """Calculate average and minimum pairwise semantic similarities."""
+    if len(words) < 2:
+        return 0.0, 0.0
+    
+    # Get embeddings
+    embeddings = embedding_model.encode(words, convert_to_tensor=True)
+    embeddings = F.normalize(embeddings, p=2, dim=1)
+    
+    # Calculate pairwise similarities
+    similarities = torch.mm(embeddings, embeddings.t())
+    
+    # Mask out self-similarities
+    mask = torch.ones_like(similarities) - torch.eye(similarities.shape[0], device=similarities.device)
+    masked_similarities = similarities * mask
+    
+    # Calculate metrics
+    avg_similarity = masked_similarities.sum() / (len(words) * (len(words) - 1))
+    min_similarity = masked_similarities[masked_similarities > 0].min()
+    
+    return avg_similarity.item(), min_similarity.item()
 
-logger.info(f"Loading trained model from {final_checkpoint_dir_to_test} for testing...")
+def analyze_diversity(words: List[str], model_name: str, embedding_model: SentenceTransformer):
+    """Analyze semantic diversity within a set of generated words."""
+    print(f"\n=== Semantic Diversity Analysis for {model_name} ===")
+    
+    if len(words) < 2:
+        print("Not enough words for diversity analysis")
+        return
+    
+    # Get embeddings
+    embeddings = embedding_model.encode(words, convert_to_tensor=True)
+    embeddings = F.normalize(embeddings, p=2, dim=1)
+    
+    # Calculate pairwise similarities
+    similarities = torch.mm(embeddings, embeddings.t())
+    
+    # Mask out self-similarities
+    mask = torch.ones_like(similarities) - torch.eye(similarities.shape[0], device=similarities.device)
+    masked_similarities = similarities * mask
+    
+    # Calculate metrics
+    avg_similarity = masked_similarities.sum() / (len(words) * (len(words) - 1))
+    min_similarity = masked_similarities[masked_similarities > 0].min()
+    
+    print(f"Number of unique words: {len(words)}")
+    print(f"Average pairwise similarity: {avg_similarity.item():.3f}")
+    print(f"Minimum pairwise similarity: {min_similarity.item():.3f}")
+    print(f"Semantic diversity score: {1 - avg_similarity.item():.3f}")
+    print("-" * 80)
 
-if not os.path.exists(final_checkpoint_dir_to_test):
-    logger.error(f"Checkpoint directory not found: {final_checkpoint_dir_to_test}")
-else:
+def setup_model_and_tokenizer(model_path_or_name):
+    """Set up model and tokenizer for testing."""
+    logger.info(f"Loading model from {model_path_or_name}...")
+    
     # Determine device for inference
     test_mps_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
     test_cuda_available = torch.cuda.is_available()
-    inference_device_type = "mps" if test_mps_available else ("cuda" if test_cuda_available else "cpu")
-    # Use device index 0 if multiple GPUs/MPS devices exist
+    inference_device_type = "cuda" if test_cuda_available else ("mps" if test_mps_available else "cpu")
     inference_device = f"{inference_device_type}:0" if inference_device_type != "cpu" else "cpu"
-
+    
     logger.info(f"Setting inference device: {inference_device}")
-
+    
     try:
-        # Load the model and tokenizer again for a clean test pipeline
-        test_model = AutoModelForCausalLM.from_pretrained(final_checkpoint_dir_to_test)
-        test_tokenizer = AutoTokenizer.from_pretrained(final_checkpoint_dir_to_test)
+        model = AutoModelForCausalLM.from_pretrained(model_path_or_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_path_or_name)
+        
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+        
+        model.to(inference_device)
+        model.eval()
+        logger.info(f"Model loaded onto {model.device}")
+        
+        return model, tokenizer, inference_device
+    except Exception as e:
+        logger.error(f"Failed to load model: {e}", exc_info=True)
+        return None, None, None
 
-        # Ensure pad token is set if needed (might be redundant if saved correctly)
-        if test_tokenizer.pad_token is None:
-            test_tokenizer.pad_token = test_tokenizer.eos_token
-            test_tokenizer.pad_token_id = test_tokenizer.eos_token_id
-
-        # Move model to the designated inference device
-        test_model.to(inference_device)
-        test_model.eval() # Set model to evaluation mode
-        logger.info(f"Test model loaded onto {test_model.device}")
-
-        # Use TextGenerationPipeline for more control if needed, or default pipeline
-        pipe = TextGenerationPipeline(model=test_model, tokenizer=test_tokenizer, device=inference_device)
-
-
-        base_prompt_text = "Generate a english single word. Do not use proper nouns like names of people or places. Just generate a single word."
-
-        # --- Apply Chat Template ---
-        # Create the message structure expected by the template
-        messages = [
-            {"role": "user", "content": base_prompt_text}
-            # Add system prompt if needed/used during training, e.g.:
-            # {"role": "system", "content": "You are a helpful assistant."},
-            # {"role": "user", "content": base_prompt_text}
-        ]
-        # Apply the template. Ensure add_generation_prompt=True to get the prompt ending with the assistant turn starter.
+def run_generation_test(model, tokenizer, device, model_name="unnamed_model"):
+    """Run generation test with given model and tokenizer."""
+    try:
+        pipe = TextGenerationPipeline(model=model, tokenizer=tokenizer, device=device)
+        
+        # Format prompt with chat template
         try:
-            test_prompt_formatted = test_tokenizer.apply_chat_template(
+            messages = [{"role": "user", "content": BASE_PROMPT}]
+            formatted_prompt = tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
-                add_generation_prompt=True # Crucial to prepare for generation
+                add_generation_prompt=True
             )
-            logger.info("Applied chat template to test prompt.")
-            print(f"--- Formatted Prompt for Testing ---\n{test_prompt_formatted}\n---------------------------------")
+            logger.info("Applied chat template to prompt.")
         except Exception as e:
-            logger.warning(f"Could not apply chat template automatically: {e}. Using raw prompt string. Output might be suboptimal.")
-            test_prompt_formatted = base_prompt_text # Fallback to raw prompt
-        # --- End Apply Chat Template ---
-
-
-        # Use generation config consistent with training/expectations
-        # Consider aligning temperature/top_k with training if template doesn't fix it
+            logger.warning(f"Could not apply chat template: {e}. Using raw prompt.")
+            formatted_prompt = BASE_PROMPT
+        
         gen_config = GenerationConfig(
-            max_new_tokens=MAX_TARGET_LENGTH, # Use config from training
+            max_new_tokens=MAX_TARGET_LENGTH,
             min_new_tokens=1,
-            pad_token_id=test_tokenizer.pad_token_id,
-            # Ensure EOS token handling matches the model's template/fine-tuning
-            # Qwen often uses <|im_end|> (ID: 151645) as a stop token.
-            # Use the tokenizer's configured eos_token_id if possible.
-            eos_token_id=test_tokenizer.eos_token_id, # Trust the loaded tokenizer's EOS ID
-            bos_token_id=test_tokenizer.bos_token_id,
+            pad_token_id=tokenizer.pad_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            bos_token_id=tokenizer.bos_token_id,
             do_sample=True,
-            temperature=0.7, # Keep test temperature for now
-            top_k=50,        # Keep test top_k for now
+            temperature=0.7,
+            top_k=50,
             repetition_penalty=1.1
         )
-
-        num_sequences_to_generate = 200
-        logger.info(f"Generating {num_sequences_to_generate} sequences using formatted prompt...")
-        with torch.no_grad(): # Ensure no gradients are calculated during inference
-             # --- Use formatted prompt ---
-             generated_outputs = pipe(test_prompt_formatted, generation_config=gen_config, num_return_sequences=num_sequences_to_generate)
-             # --- End Use formatted prompt ---
-
-        print(f"\n--- Test Generation Results for prompt: '{base_prompt_text}' ---") # Print original base prompt for clarity
+        
+        num_sequences = 200
+        logger.info(f"Generating {num_sequences} sequences using {model_name}...")
+        
+        with torch.no_grad():
+            outputs = pipe(formatted_prompt, generation_config=gen_config, num_return_sequences=num_sequences)
+        
+        print(f"\n--- Generation Results for {model_name} ---")
         generated_words = []
-        for i, output in enumerate(generated_outputs):
-            # Extract only the generated text part
+        
+        for i, output in enumerate(outputs):
             full_text = output['generated_text']
-            # Find the end of the *formatted* prompt to isolate the generated part
-            # This assumes the formatted prompt is present exactly at the beginning
-            if full_text.startswith(test_prompt_formatted):
-                 generated_part = full_text[len(test_prompt_formatted):].strip()
+            
+            if full_text.startswith(formatted_prompt):
+                generated_part = full_text[len(formatted_prompt):].strip()
             else:
-                 # Fallback: Try removing the base prompt text if formatted prompt isn't exact match
-                 # This might happen if pipeline adds/removes spaces etc.
-                 if base_prompt_text in full_text:
-                      # Find the last occurrence of the base prompt text and take text after it
-                      start_index = full_text.rfind(base_prompt_text) + len(base_prompt_text)
-                      # Also need to account for potential template tokens like <|im_end|><|im_start|>assistant\n
-                      # A simpler, though less robust, fallback is just basic replacement again
-                      generated_part = full_text.replace(test_prompt_formatted, "").strip() # Less reliable fallback
-                      logger.warning(f"Formatted prompt not found exactly at start of output {i+1}. Using basic replacement fallback.")
-
-                 else:
-                      generated_part = full_text # Cannot reliably remove prompt
-                      logger.warning(f"Could not reliably remove prompt from output {i+1}.")
-
-
-            # --- MODIFIED CLEANUP (like training) ---
-            # Take the *last* word and strip common punctuation
+                generated_part = full_text.replace(formatted_prompt, "").strip()
+            
             words_in_generated = generated_part.split()
             if words_in_generated:
-                # Get the last element
-                last_word_candidate = words_in_generated[-1]
-                # Strip common leading/trailing punctuation
-                cleaned_word = last_word_candidate.strip(".,;:!?\"'()[]{}<>")
+                last_word = words_in_generated[-1].strip(".,;:!?\"'()[]{}<>")
             else:
-                # If splitting results in no words
-                cleaned_word = "[empty]"
-            # --- END MODIFIED CLEANUP ---
-
-            # Use the cleaned_word (last word) for analysis
-            generated_words.append(cleaned_word.lower())
-            print(f"{i+1}: '{cleaned_word}' (Full Raw: '{generated_part}')") # Print the cleaned word
-
-        # Analyze results based on the extracted last words
-        unique_words = set(w for w in generated_words if w != '[empty]') # Filter empty results
-        num_unique = len(unique_words)
-        print(f"\nAnalysis: Generated {len(generated_words)} words, {num_unique} unique words.")
-        print(f"Unique words: {sorted(list(unique_words))}")
-        print("---------------------------------------------------------")
-
+                last_word = "[empty]"
+            
+            generated_words.append(last_word.lower())
+            print(f"{i+1}: '{last_word}' (Full: '{generated_part}')")
+        
+        unique_words = set(w for w in generated_words if w != '[empty]')
+        print(f"\nAnalysis for {model_name}:")
+        print(f"Total words generated: {len(generated_words)}")
+        print(f"Unique words: {len(unique_words)}")
+        print(f"All unique words: {sorted(list(unique_words))}")
+        print("-" * 80)
+        
+        return generated_words, unique_words
+    
     except Exception as e:
-        logger.error(f"Failed to run test generation: {e}", exc_info=True)
+        logger.error(f"Failed to run generation test: {e}", exc_info=True)
+        return [], set()
+
+def main():
+    """Run baseline and trained model tests."""
+    # Load embedding model
+    logger.info(f"Loading embedding model {EMBEDDING_MODEL_NAME}...")
+    embedding_device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() and torch.backends.mps.is_built() else "cpu")
+    embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME, device=embedding_device)
+    
+    # Test baseline model
+    logger.info("Testing baseline (untrained) model...")
+    base_model, base_tokenizer, base_device = setup_model_and_tokenizer(BASE_MODEL_NAME)
+    base_words, base_unique = [], set()
+    if base_model is not None:
+        base_words, base_unique = run_generation_test(
+            base_model, base_tokenizer, base_device, "baseline_model"
+        )
+        analyze_diversity(list(base_unique), "Baseline Model", embedding_model)
+    
+    # Test trained model if available
+    trained_words, trained_unique = [], set()
+    if os.path.exists(TRAINED_MODEL_PATH):
+        logger.info("Testing trained model...")
+        trained_model, trained_tokenizer, trained_device = setup_model_and_tokenizer(TRAINED_MODEL_PATH)
+        if trained_model is not None:
+            trained_words, trained_unique = run_generation_test(
+                trained_model, trained_tokenizer, trained_device, "trained_model"
+            )
+            
+            # Compare results
+            print("\n=== Comparison ===")
+            print(f"Baseline unique words: {len(base_unique)}")
+            print(f"Trained unique words: {len(trained_unique)}")
+            print(f"Words only in baseline: {sorted(base_unique - trained_unique)}")
+            print(f"Words only in trained: {sorted(trained_unique - base_unique)}")
+            print(f"Words in both: {sorted(base_unique & trained_unique)}")
+            
+            # Analyze semantic diversity
+            analyze_diversity(list(trained_unique), "Trained Model", embedding_model)
+    else:
+        logger.warning(f"Trained model not found at {TRAINED_MODEL_PATH}")
+
+if __name__ == "__main__":
+    main()
