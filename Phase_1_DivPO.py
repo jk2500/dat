@@ -1,27 +1,12 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# # Phase 1: DivPO Training for Diverse Noun Generation
-
-# This notebook implements the first phase of training using Diversity-enhanced Preference Optimization (DivPO). The goal is to fine-tune a language model (like Phi-4-mini-instruct) to generate diverse, common, single-word English nouns based on a simple prompt.
-
-# ## 1. Imports and Setup
-
-# In[1]:
-
-
 import torch
 import torch.nn.functional as F
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    TrainingArguments,
-    DataCollatorForSeq2Seq,
     GenerationConfig,
-    BitsAndBytesConfig, # Optional
-    PreTrainedModel,
-    PreTrainedTokenizerBase
+    PreTrainedModel
 )
+from trl import DPOConfig
 # Ensure PreTrainedModelWrapper is imported if using older TRL versions
 # from trl.models import PreTrainedModelWrapper # Might be needed depending on TRL version
 # For newer TRL, explicit wrapper might not be needed if model is nn.Module
@@ -36,11 +21,11 @@ import spacy
 import nltk
 from wordfreq import top_n_list # Or other frequency source
 import logging
-import random
 import os
 import ssl
 from typing import Dict, List, Optional, Tuple, Union, Any, Callable # Added missing types
 import warnings
+from setup_nlp_resources import setup_all_resources
 
 
 # --- Suppress specific DeprecationWarning ---
@@ -55,20 +40,11 @@ logger = logging.getLogger(__name__)
 
 # ## 2. Configuration
 
-# In[2]:
-
 
 MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct" # Or other model
 #MODEL_NAME = "./phi-4-mini-instruct-local" # Make sure this path is correct
 OUTPUT_DIR = "./divpo_dat_model_phase1"      # Where to save checkpoints and the final model
 
-# Optional: Quantization for large models (Keep False for MPS/CPU unless specifically needed and supported)
-# USE_QUANTIZATION = False
-# bnb_config = BitsAndBytesConfig(
-#     load_in_4bit=True,
-#     bnb_4bit_quant_type="nf4",
-#     bnb_4bit_compute_dtype=torch.bfloat16 # Or float16
-# )
 
 # DivPO Hyperparameters
 K_SAMPLES = 16 # Number of samples per prompt (adjust based on memory)
@@ -78,7 +54,7 @@ DPO_BETA = 0.1 # DPO beta parameter (controls how much to trust the reference mo
 PER_DEVICE_TRAIN_BATCH_SIZE = 2 # Adjust based on GPU/MPS memory
 GRADIENT_ACCUMULATION_STEPS = 8 # Adjust effective batch size (effective_batch_size = batch_size * num_gpus * grad_accum)
 LEARNING_RATE = 1e-6 # Tune LR (often lower for fine-tuning)
-NUM_TRAIN_EPOCHS = 1 # Start with 1 epoch
+NUM_TRAIN_EPOCHS = 5 # Start with 1 epoch
 LOGGING_STEPS = 10 # Log more frequently initially
 SAVE_STEPS = 100 # Save checkpoints periodically
 MAX_PROMPT_LENGTH = 64 # Max tokens for the prompt
@@ -92,8 +68,6 @@ logger.info(f"Using device for embedding model: {EMBEDDING_DEVICE}")
 
 
 # ## 3. Helper Functions (Setup & Definitions)
-
-# In[3]:
 
 
 # --- NLTK & spaCy Download --- (Run once)
@@ -186,11 +160,11 @@ def calculate_quality(word: str) -> float:
     pos_tag = token.tag_ # Get the fine-grained Part-of-Speech tag
 
     # 4. Noun Type Check:
-    #    - Must be a noun (NN: singular, NNS: plural)
-    #    - Must NOT be a proper noun (NNP: singular proper, NNPS: plural proper)
+    #    - Must be a noun (NN: singular noun)
+    #    - Must NOT be a proper noun (NNP: singular proper)
     #    - Must NOT be unexpectedly capitalized (e.g., "Table" if not a proper noun)
-    is_noun = pos_tag in ['NN', 'NNS']
-    is_proper_noun = pos_tag in ['NNP', 'NNPS']
+    is_noun = pos_tag in ['NN']
+    is_proper_noun = pos_tag in ['NNP']
     is_unexpectedly_capitalized = len(word) > 1 and word[0].isupper() and not is_proper_noun
 
     # 5. Final Decision: All conditions must be met
@@ -352,8 +326,6 @@ logger.info(f"Model final compute device: {model.device}") # Check the primary d
 
 # In[7]:
 
-
-from trl import DPOConfig
 
 # Type Hinting for clarity (adapt based on exact TRL version)
 ModelType = Union[PreTrainedModel, torch.nn.Module, DistributedDataParallel]
@@ -1110,107 +1082,6 @@ except Exception as e:
 
 print("\nPhase 1 (DivPO Training) Script Section Complete.")
 
-
-# ## 10. (Optional) Test Generation
-
-# In[12]:
-
-
-# Optional: Test Generation Cell (uncomment code block to run)
-'''
-from transformers import pipeline, TextGenerationPipeline, AutoModelForCausalLM, AutoTokenizer, GenerationConfig
-import torch
-import logging
-
-logger = logging.getLogger(__name__)
-
-final_checkpoint_dir_to_test = "./divpo_dat_model_phase1/final_checkpoint" # Or path to another checkpoint
-
-logger.info(f"Loading trained model from {final_checkpoint_dir_to_test} for testing...")
-
-if not os.path.exists(final_checkpoint_dir_to_test):
-    logger.error(f"Checkpoint directory not found: {final_checkpoint_dir_to_test}")
-else:
-    # Determine device for inference
-    test_mps_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
-    test_cuda_available = torch.cuda.is_available()
-    inference_device_type = "mps" if test_mps_available else ("cuda" if test_cuda_available else "cpu")
-    # Use device index 0 if multiple GPUs/MPS devices exist
-    inference_device = f"{inference_device_type}:0" if inference_device_type != "cpu" else "cpu"
-
-    logger.info(f"Setting inference device: {inference_device}")
-
-    try:
-        # Load the model and tokenizer again for a clean test pipeline
-        test_model = AutoModelForCausalLM.from_pretrained(final_checkpoint_dir_to_test)
-        test_tokenizer = AutoTokenizer.from_pretrained(final_checkpoint_dir_to_test)
-
-        # Ensure pad token is set if needed (might be redundant if saved correctly)
-        if test_tokenizer.pad_token is None:
-            test_tokenizer.pad_token = test_tokenizer.eos_token
-            test_tokenizer.pad_token_id = test_tokenizer.eos_token_id
-
-        # Move model to the designated inference device
-        test_model.to(inference_device)
-        test_model.eval() # Set model to evaluation mode
-        logger.info(f"Test model loaded onto {test_model.device}")
-
-        # Use TextGenerationPipeline for more control if needed, or default pipeline
-        # pipe = pipeline("text-generation", model=test_model, tokenizer=test_tokenizer, device=inference_device) # device arg might map model internally
-        # Or manually ensure device placement if pipeline's device arg causes issues:
-        pipe = TextGenerationPipeline(model=test_model, tokenizer=test_tokenizer, device=inference_device)
-
-
-        test_prompt = "Generate a single word that is a common English noun (like a thing, object, or concept). Do not use proper nouns like names of people or places."
-        # Use generation config consistent with training/expectations
-        gen_config = GenerationConfig(
-            max_new_tokens=MAX_TARGET_LENGTH, # Use config from training
-            min_new_tokens=1,
-            pad_token_id=test_tokenizer.pad_token_id,
-            eos_token_id=test_tokenizer.eos_token_id,
-            bos_token_id=test_tokenizer.bos_token_id,
-            do_sample=True,
-            temperature=0.7, # Can adjust temperature for testing
-            top_k=50,
-            repetition_penalty=1.1 # Slightly discourage repetition
-        )
-
-        num_sequences_to_generate = 10
-        logger.info(f"Generating {num_sequences_to_generate} sequences...")
-        with torch.no_grad(): # Ensure no gradients are calculated during inference
-             generated_outputs = pipe(test_prompt, generation_config=gen_config, num_return_sequences=num_sequences_to_generate)
-
-        print(f"\n--- Test Generation Results for prompt: '{test_prompt}' ---")
-        generated_words = []
-        for i, output in enumerate(generated_outputs):
-            # Extract only the generated text part
-            full_text = output['generated_text']
-            # Find the end of the prompt to isolate the generated part
-            # This assumes the prompt is present exactly at the beginning
-            if full_text.startswith(test_prompt):
-                 generated_part = full_text[len(test_prompt):].strip()
-            else:
-                 # Fallback if prompt isn't exactly at start (less reliable)
-                 # Look for common instruction patterns if prompt is modified by model
-                 output_marker = "Output:"
-                 if output_marker in full_text:
-                     generated_part = full_text.split(output_marker, 1)[-1].strip()
-                 else:
-                     generated_part = full_text.replace(test_prompt, "").strip() # Basic replacement
-
-            # Further cleanup: take the first word, handle potential extra text
-            first_word = generated_part.split()[0].strip(".,;:!?\"'") if generated_part.split() else "[empty]"
-            generated_words.append(first_word.lower())
-            print(f"{i+1}: '{first_word}' (Full Raw: '{generated_part}')")
-
-        # Analyze results
-        unique_words = set(generated_words) - set(['[empty]'])
-        num_unique = len(unique_words)
-        print(f"\nAnalysis: Generated {len(generated_words)} words, {num_unique} unique words.")
-        print(f"Unique words: {sorted(list(unique_words))}")
-        print("---------------------------------------------------------")
-
-    except Exception as e:
-        logger.error(f"Failed to run test generation: {e}", exc_info=True)
-'''
-
+print("Setting up NLP resources...")
+nlp = setup_all_resources()
+print("NLP resources ready.")

@@ -1,2 +1,10 @@
 # Ignore all checkpoints, logs, and model outputs from Phase 1 training
-divpo_dat_model_phase1/ 
+divpo_dat_model_phase1/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/ 
