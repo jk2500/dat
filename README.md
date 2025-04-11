@@ -1,4 +1,4 @@
-# Phase 1: DivPO Training for Diverse Noun Generation
+# DivPO Training for Diverse Noun Generation
 
 This project implements the first phase of training a language model using **Diverse Preference Optimization (DivPO)**, a method introduced in the paper **"Diverse Preference Optimization"** by Lanchantin et al. ([arXiv:2501.18101](https://arxiv.org/abs/2501.18101)). The goal is to fine-tune a causal language model (e.g., Qwen, Phi) to generate diverse, common, English nouns based on a simple prompt, avoiding proper nouns.
 
@@ -127,4 +127,35 @@ A subsequent test run using `K_SAMPLES=64` during training yielded different obs
 
 ## Dependencies
 
-*   `
+*   `torch`
+*   `transformers`
+*   `trl`
+*   `datasets`
+*   `sentence-transformers`
+*   `nltk` (+ `words`, `averaged_perceptron_tagger`, `names`, `wordnet` data)
+*   `accelerate`
+*   `bitsandbytes` (Optional, for 4-bit quantization if enabled)
+
+## License
+
+MIT License
+
+Copyright (c) 2025 jk2500
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
