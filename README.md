@@ -101,48 +101,30 @@ The codebase is organized into the following modules:
 
 ## Example Test Results
 
-A sample run comparing the baseline model (`Qwen/Qwen2.5-0.5B-Instruct`) against the model fine-tuned with DivPO yielded the following observations based on 200 generated samples:
+Below are results from comparing the baseline model (`Qwen/Qwen2.5-0.5B-Instruct`) against models fine-tuned with different DivPO configurations.
 
-*   **Vocabulary Shift & Collapse:** The trained model generated significantly fewer unique words (**9**) compared to the baseline model (**47**). Notably, the outputted words by the trained model ('silence', 'echo', 'peace', 'light', 'ethereal', 'elegance', 'effect', 'eternal', 'love') are **common nouns**, aligning with the project's quality goal, even though the overall variety decreased.
+### Initial Test Run (Implied K=16 or earlier config)
+
+A sample run yielded the following observations based on 200 generated samples:
+
+*   **Vocabulary Shift & Collapse:** The trained model generated significantly fewer unique words (**9**) compared to the baseline model (**47**). Notably, the frequently outputted words by the trained model ('silence', 'echo', 'peace', 'light', 'ethereal', 'elegance', 'effect', 'eternal', 'love') are indeed **common nouns**, aligning with the project's quality goal, even though the overall variety decreased.
 *   **Semantic Similarity/Diversity:**
     *   The *minimum* pairwise similarity between generated words increased significantly (0.033 baseline vs 0.139 trained), indicating that the closest pair of words in the trained set were more distinct than the closest pair in the baseline.
     *   The *average* pairwise similarity saw a slight increase (0.284 baseline vs 0.304 trained).
     *   The overall semantic diversity score (1 - max pairwise similarity) remained comparable, decreasing only slightly (0.716 baseline vs 0.696 trained).
-*   **Interpretation:** While the training aimed for *diverse common nouns*, these results show a trade-off. The model converged to a much smaller vocabulary of valid common nouns, losing overall quantitative variety compared to the baseline. However, the words within this smaller set maintained a reasonable level of semantic distance from each other (especially avoiding very close pairs), and the overall diversity metric did not collapse. This might suggest a shift in sampling towards a constrained but relatively distinct set of common nouns, though further analysis is needed to determine if this outcome fully aligns with the desired goal of *broad* diversity within the target category.
+*   **Interpretation:** The model converged to a much smaller vocabulary of valid common nouns, losing overall quantitative variety. However, the words within this smaller set maintained a reasonable level of semantic distance from each other (especially avoiding very close pairs). This suggested a shift towards a constrained but relatively distinct set.
+
+### Test Run with K_SAMPLES = 64
+
+A subsequent test run using `K_SAMPLES=64` during training yielded different observations (again based on 200 generated samples):
+
+*   **Vocabulary Collapse:** Still present, with the trained model generating fewer unique words (**34**) than the baseline (**76**), although the reduction was less drastic than the initial run.
+*   **Semantic Similarity/Diversity:** In contrast to the initial run, this configuration showed improvements in diversity metrics compared to its baseline:
+    *   *Average* pairwise similarity decreased (0.283 baseline vs 0.263 trained), indicating words were, on average, *more* distinct.
+    *   *Minimum* pairwise similarity increased significantly (0.028 baseline vs 0.069 trained), meaning the closest words were further apart.
+    *   The overall *semantic diversity score* (1 - Avg Sim) slightly increased (0.717 baseline vs 0.737 trained).
+*   **Interpretation:** Increasing `K_SAMPLES` to 64 appeared to successfully encourage more diversity among the generated words compared to the baseline (lower average similarity, higher minimum similarity). However, this still came with a significant reduction in the total vocabulary size compared to the baseline. This suggests that further increasing `K_SAMPLES` could continue to enhance pairwise diversity metrics, potentially also leading to a larger output vocabulary compared to lower K values, albeit at the cost of significantly increased computational expense.
 
 ## Dependencies
 
-*   `torch`
-*   `transformers`
-*   `trl`
-*   `datasets`
-*   `sentence-transformers`
-*   `spacy` (+ `en_core_web_sm` model)
-*   `nltk` (+ `words`, `averaged_perceptron_tagger` data)
-*   `wordfreq`
-*   `accelerate`
-*   `bitsandbytes` (Optional, for 4-bit quantization if enabled)
-
-## License
-
-MIT License
-
-Copyright (c) 2025 jk2500
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE. 
+*   `

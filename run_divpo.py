@@ -5,7 +5,8 @@ Main script to run DivPO training
 import logging
 import sys
 import os
-from setup_nlp_resources import setup_all_resources
+# Changed import to use the NLTK-only setup function
+from divpo.utils import setup_nltk_only
 
 # Set up logging
 logging.basicConfig(
@@ -25,19 +26,19 @@ def main():
     # Setup directory for imports
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     
-    # Step 1: Set up NLP resources
-    logger.info("Setting up NLP resources...")
-    nlp = setup_all_resources()
-    logger.info("NLP resources ready.")
+    # Step 1: Set up NLTK resources and get name list
+    logger.info("Setting up NLTK resources...")
+    name_list = setup_nltk_only() # Now returns the loaded name list
+    logger.info("NLTK resources ready.")
     
     # Step 2: Import after NLP setup to avoid circular imports
     from divpo.training import load_resources, setup_training, run_training, save_final_model
     
-    # Step 3: Load resources
+    # Step 3: Load other resources
     resources = load_resources()
     
-    # Step 4: Set up training components
-    training_components = setup_training(resources, nlp)
+    # Step 4: Set up training components, passing the name list
+    training_components = setup_training(resources, name_list) # Pass name_list
     
     # Step 5: Run training
     training_result = run_training(training_components)

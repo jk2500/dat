@@ -9,7 +9,7 @@ from wordfreq import top_n_list
 from sentence_transformers import SentenceTransformer
 from trl import DPOConfig
 import warnings
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Set
 
 from divpo.config import (
     MODEL_NAME, OUTPUT_DIR, K_SAMPLES, DPO_BETA, 
@@ -59,13 +59,13 @@ def load_resources():
         raise
 
 
-def setup_training(resources: Dict[str, Any], nlp) -> Dict[str, Any]:
+def setup_training(resources: Dict[str, Any], name_list: Set[str]) -> Dict[str, Any]:
     """
     Set up all components needed for training.
     
     Args:
         resources: Dictionary of NLP resources
-        nlp: Loaded spaCy NLP model
+        name_list: Set of known lowercased names
         
     Returns:
         Dictionary with training components
@@ -80,7 +80,7 @@ def setup_training(resources: Dict[str, Any], nlp) -> Dict[str, Any]:
     
     # Create quality function with bound parameters
     def quality_fn(word: str) -> float:
-        return calculate_quality(word, nlp, resources['common_vocab'])
+        return calculate_quality(word, name_list, resources['common_vocab'])
     
     # Initialize training arguments
     use_mps_for_training = model_device == "mps"

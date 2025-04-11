@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 MAX_TARGET_LENGTH = 10
 BASE_MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"  # The original, untrained model
 TRAINED_MODEL_PATH = "./divpo_dat_model_phase1/final_checkpoint"
-BASE_PROMPT = "Generate a english single word. Do not use proper nouns like names of people or places. Just generate a single word."
+BASE_PROMPT = "Generate a single english common noun. Do not use proper nouns like names of people or places. Just generate a single common noun."
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"  # Same as used in training
 
 def calculate_semantic_metrics(words: List[str], embedding_model: SentenceTransformer) -> Tuple[float, float]:
